@@ -1,4 +1,4 @@
-<addon id="script.module.astral" name="astral" version="2.2+matrix.2" provider-name="semool">
+<addon id="script.module.astral" name="astral" version="2.2+matrix.1" provider-name="semool">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
   </requires>
