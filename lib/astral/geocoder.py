@@ -6,14 +6,14 @@ To get the :class:`~astral.LocationInfo` for a location use the
     from astral.geocoder import lookup, database
     l = lookup("London", database())
 
-All locations stored in the database can be accessed using the `all_locations` generator ::
+All locations stored in the database can be accessed using the `all_locations`
+generator ::
 
     from astral.geocoder import all_locations
     for location in all_locations:
         print(location)
 """
 
-from functools import reduce
 from typing import Dict, Generator, List, Optional, Tuple, Union
 
 from astral import LocationInfo, dms_to_float
@@ -275,6 +275,7 @@ Yaounde,Cameroon,Africa/Douala,03°50'N,11°35'E
 Yaren,Nauru,Pacific/Nauru,0°32'S,166°55'E
 Yerevan,Armenia,Asia/Yerevan,40°10'N,44°31'E
 Zagreb,Croatia,Europe/Zagreb,45°50'N,15°58'E
+Zurich,Switzerland,Europe/Zurich,47°22'N,08°33'E
 
 # UK Cities
 Aberdeen,Scotland,Europe/London,57°08'N,02°06'W
@@ -420,9 +421,9 @@ Iqaluit,Canada,America/Iqaluit,63°44'N,68°31'W
 # endregion
 
 GroupName = str
-GroupInfo = Dict
-LocationInfoList = List[LocationInfo]
-LocationDatabase = Dict[GroupName, GroupInfo[str, LocationInfoList]]
+LocationName = str
+GroupInfo = Dict[LocationName, List[LocationInfo]]
+LocationDatabase = Dict[GroupName, GroupInfo]
 
 
 def database() -> LocationDatabase:
@@ -434,18 +435,13 @@ def database() -> LocationDatabase:
     return db
 
 
-def _sanitize_key(key) -> str:
+def _sanitize_key(key: str) -> str:
     """Sanitize the location or group key to look up
 
     Args:
         key: The key to sanitize
     """
     return str(key).lower().replace(" ", "_")
-
-
-def _location_count(db: LocationDatabase) -> int:
-    """Returns the count of the locations currently in the database"""
-    return reduce(lambda count, group: count + len(group), db.values(), 0)
 
 
 def _get_group(name: str, db: LocationDatabase) -> Optional[GroupInfo]:
@@ -467,7 +463,20 @@ def _add_location_to_db(location: LocationInfo, db: LocationDatabase) -> None:
         group[location_key].append(location)
 
 
-def _indexable_to_locationinfo(idxable) -> LocationInfo:
+def _locationinfo_from_str(info: str) -> LocationInfo:
+    idxable = info.split(",")
+    return LocationInfo(
+        name=idxable[0],
+        region=idxable[1],
+        timezone=idxable[2],
+        latitude=dms_to_float(idxable[3], 90.0),
+        longitude=dms_to_float(idxable[4], 180.0),
+    )
+
+
+def _locationinfo_from_indexable(
+    idxable: Union[Tuple[str, ...], List[str]]
+) -> LocationInfo:
     return LocationInfo(
         name=idxable[0],
         region=idxable[1],
@@ -483,32 +492,37 @@ def _add_locations_from_str(location_string: str, db: LocationDatabase) -> None:
     for line in location_string.split("\n"):
         line = line.strip()
         if line != "" and line[0] != "#":
-            info = line.split(",")
-            location = _indexable_to_locationinfo(info)
+            location = _locationinfo_from_str(line)
             _add_location_to_db(location, db)
 
 
 def _add_locations_from_list(
-    location_list: List[Union[Tuple, str]], db: LocationDatabase
+    location_list: Union[List[str], List[List[str]], List[Tuple[str, ...]]],
+    db: LocationDatabase,
 ) -> None:
-    """Add locations from a list of either strings or lists of strings or tuples of strings."""
+    """Add locations from a list of either strings or lists of strings
+    or tuples of strings.
+    """
     for info in location_list:
         if isinstance(info, str):
             _add_locations_from_str(info, db)
-        elif isinstance(info, (list, tuple)):
-            location = _indexable_to_locationinfo(info)
+        else:
+            location = _locationinfo_from_indexable(info)
             _add_location_to_db(location, db)
 
 
-def add_locations(locations: Union[List, str], db: LocationDatabase) -> None:
+def add_locations(
+    locations: Union[str, List[str], List[List[str]], List[Tuple[str, ...]]],
+    db: LocationDatabase,
+) -> None:
     """Add locations to the database.
 
-    Locations can be added by passing either a string with one line per location or by passing
-    a list containing strings, lists or tuples (lists and tuples are passed directly to the
-    LocationInfo constructor)."""
+    Locations can be added by passing either a string with one line per location or
+    by passing a list containing strings, lists or tuples (lists and tuples are
+    passed directly to the LocationInfo constructor)."""
     if isinstance(locations, str):
         _add_locations_from_str(locations, db)
-    elif isinstance(locations, (list, tuple)):
+    else:
         _add_locations_from_list(locations, db)
 
 
@@ -532,7 +546,9 @@ def group(region: str, db: LocationDatabase) -> GroupInfo:
     raise KeyError(f"Unrecognised Group - {region}")
 
 
-def lookup_in_group(location: str, group: Dict) -> LocationInfo:
+def lookup_in_group(
+    location: str, group: Dict[str, List[LocationInfo]]
+) -> LocationInfo:
     """Looks up the location within a group dictionary
 
     You can supply an optional region name by adding a comma
@@ -575,7 +591,7 @@ def lookup_in_group(location: str, group: Dict) -> LocationInfo:
     raise KeyError(f"Unrecognised location name - {key}")
 
 
-def lookup(name: str, db: LocationDatabase) -> Union[Dict, LocationInfo]:
+def lookup(name: str, db: LocationDatabase) -> Union[GroupInfo, LocationInfo]:
     """Look up a name in a database.
 
     If a group with the name specified is a group name then that will
@@ -604,7 +620,8 @@ def lookup(name: str, db: LocationDatabase) -> Union[Dict, LocationInfo]:
 
 
 def all_locations(db: LocationDatabase) -> Generator[LocationInfo, None, None]:
-    """A generator that returns all the :class:`~astral.LocationInfo`\\s contained in the database
+    """A generator that returns all the :class:`~astral.LocationInfo`\\s
+    contained in the database
     """
     for group_info in db.values():
         for location_list in group_info.values():

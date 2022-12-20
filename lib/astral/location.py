@@ -1,8 +1,12 @@
 import dataclasses
 import datetime
-from typing import Optional, Tuple, Union
 
-import pytz
+try:
+    import zoneinfo
+except ImportError:
+    from backports import zoneinfo
+
+from typing import Any, Dict, Optional, Tuple, Union
 
 import astral.moon
 import astral.sun
@@ -23,20 +27,20 @@ class Location:
     def __init__(self, info: Optional[LocationInfo] = None):
         """Initializes the Location with a LocationInfo object.
 
-            The tuple should contain items in the following order
+        The tuple should contain items in the following order
 
-            ================ =============
-            Field            Default
-            ================ =============
-            name             Greenwich
-            region           England
-            time zone name   Europe/London
-            latitude         51.4733
-            longitude        -0.0008333
-            ================ =============
+        ================ =============
+        Field            Default
+        ================ =============
+        name             Greenwich
+        region           England
+        time zone name   Europe/London
+        latitude         51.4733
+        longitude        -0.0008333
+        ================ =============
 
-            See the :attr:`timezone` property for a method of obtaining time zone
-            names
+        See the :attr:`timezone` property for a method of obtaining time zone
+        names
         """
 
         self._location_info: LocationInfo
@@ -59,12 +63,20 @@ class Location:
             _repr = "%s/%s" % (self.name, self.region)
         else:
             _repr = self.name
-        return f"{_repr}, tz={self.timezone}, lat={self.latitude:0.02f}, lon={self.longitude:0.02f}"
+        return (
+            f"{_repr}, tz={self.timezone}, "
+            f"lat={self.latitude:0.02f}, "
+            f"lon={self.longitude:0.02f}"
+        )
 
     @property
     def info(self) -> LocationInfo:
         return LocationInfo(
-            self.name, self.region, self.timezone, self.latitude, self.longitude,
+            self.name,
+            self.region,
+            self.timezone,
+            self.latitude,
+            self.longitude,
         )
 
     @property
@@ -133,30 +145,30 @@ class Location:
     def timezone(self) -> str:
         """The name of the time zone for the location.
 
-        A list of time zone names can be obtained from pytz. For example.
+        A list of time zone names can be obtained from the zoneinfo module.
+        For example.
 
-        >>> from pytz import all_timezones
-        >>> for timezone in all_timezones:
-        ...     print(timezone)
+        >>> import zoneinfo
+        >>> assert "CET" in zoneinfo.available_timezones()
         """
 
         return self._location_info.timezone
 
     @timezone.setter
     def timezone(self, name: str) -> None:
-        if name not in pytz.all_timezones:
+        if name not in zoneinfo.available_timezones():  # type: ignore
             raise ValueError("Timezone '%s' not recognized" % name)
 
         self._location_info = dataclasses.replace(self._location_info, timezone=name)
 
     @property
-    def tzinfo(self) -> pytz.tzinfo:  # type: ignore
+    def tzinfo(self) -> zoneinfo.ZoneInfo:  # type: ignore
         """Time zone information."""
 
         try:
-            tz = pytz.timezone(self._location_info.timezone)
-            return tz
-        except pytz.UnknownTimeZoneError as exc:
+            tz = zoneinfo.ZoneInfo(self._location_info.timezone)  # type: ignore
+            return tz  # type: ignore
+        except zoneinfo.ZoneInfoNotFoundError as exc:  # type: ignore
             raise ValueError(
                 "Unknown timezone '%s'" % self._location_info.timezone
             ) from exc
@@ -212,10 +224,10 @@ class Location:
 
     def sun(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Returns dawn, sunrise, noon, sunset and dusk as a dictionary.
 
         :param date: The date for which to calculate the times.
@@ -231,7 +243,7 @@ class Location:
         :returns: Dictionary with keys ``dawn``, ``sunrise``, ``noon``,
             ``sunset`` and ``dusk`` whose values are the results of the
             corresponding methods.
-         """
+        """
 
         if local and self.timezone is None:
             raise ValueError("Local time requested but Location has no timezone set.")
@@ -248,7 +260,7 @@ class Location:
 
     def dawn(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> datetime.datetime:
@@ -284,7 +296,7 @@ class Location:
 
     def sunrise(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> datetime.datetime:
@@ -319,7 +331,9 @@ class Location:
         else:
             return astral.sun.sunrise(observer, date)
 
-    def noon(self, date: datetime.date = None, local: bool = True) -> datetime.datetime:
+    def noon(
+        self, date: Optional[datetime.date] = None, local: bool = True
+    ) -> datetime.datetime:
         """Calculates the solar noon (the time when the sun is at its highest
         point.)
 
@@ -347,7 +361,7 @@ class Location:
 
     def sunset(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> datetime.datetime:
@@ -382,7 +396,7 @@ class Location:
 
     def dusk(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> datetime.datetime:
@@ -418,7 +432,7 @@ class Location:
             return astral.sun.dusk(observer, date, self.solar_depression)
 
     def midnight(
-        self, date: datetime.date = None, local: bool = True
+        self, date: Optional[datetime.date] = None, local: bool = True
     ) -> datetime.datetime:
         """Calculates the solar midnight (the time when the sun is at its lowest
         point.)
@@ -448,7 +462,7 @@ class Location:
 
     def daylight(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> Tuple[datetime.datetime, datetime.datetime]:
@@ -482,7 +496,7 @@ class Location:
 
     def night(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> Tuple[datetime.datetime, datetime.datetime]:
@@ -517,7 +531,7 @@ class Location:
 
     def twilight(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         direction: SunDirection = SunDirection.RISING,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
@@ -556,10 +570,70 @@ class Location:
         else:
             return astral.sun.twilight(observer, date, direction)
 
+    def moonrise(
+        self,
+        date: Optional[datetime.date] = None,
+        local: bool = True,
+    ) -> Optional[datetime.datetime]:
+        """Calculates the time when the moon rises.
+
+        :param date: The date for which to calculate the moonrise time.
+                     If no date is specified then the current date will be used.
+
+        :param local: True  = Time to be returned in location's time zone;
+                      False = Time to be returned in UTC.
+                      If not specified then the time will be returned in local time
+
+        :returns: The date and time at which moonrise occurs.
+        """
+
+        if local and self.timezone is None:
+            raise ValueError("Local time requested but Location has no timezone set.")
+
+        if date is None:
+            date = self.today(local)
+
+        observer = Observer(self.latitude, self.longitude, 0)
+
+        if local:
+            return astral.moon.moonrise(observer, date, self.tzinfo)
+        else:
+            return astral.moon.moonrise(observer, date)
+
+    def moonset(
+        self,
+        date: Optional[datetime.date] = None,
+        local: bool = True,
+    ) -> Optional[datetime.datetime]:
+        """Calculates the time when the moon sets.
+
+        :param date: The date for which to calculate the moonset time.
+                     If no date is specified then the current date will be used.
+
+        :param local: True  = Time to be returned in location's time zone;
+                      False = Time to be returned in UTC.
+                      If not specified then the time will be returned in local time
+
+        :returns: The date and time at which moonset occurs.
+        """
+
+        if local and self.timezone is None:
+            raise ValueError("Local time requested but Location has no timezone set.")
+
+        if date is None:
+            date = self.today(local)
+
+        observer = Observer(self.latitude, self.longitude, 0)
+
+        if local:
+            return astral.moon.moonset(observer, date, self.tzinfo)
+        else:
+            return astral.moon.moonset(observer, date)
+
     def time_at_elevation(
         self,
         elevation: float,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         direction: SunDirection = SunDirection.RISING,
         local: bool = True,
     ) -> datetime.datetime:
@@ -608,7 +682,7 @@ class Location:
 
     def rahukaalam(
         self,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> Tuple[datetime.datetime, datetime.datetime]:
@@ -635,14 +709,14 @@ class Location:
         observer = Observer(self.latitude, self.longitude, observer_elevation)
 
         if local:
-            return astral.sun.rahukaalam(observer, date, self.tzinfo)
+            return astral.sun.rahukaalam(observer, date, tzinfo=self.tzinfo)
         else:
             return astral.sun.rahukaalam(observer, date)
 
     def golden_hour(
         self,
         direction: SunDirection = SunDirection.RISING,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> Tuple[datetime.datetime, datetime.datetime]:
@@ -685,7 +759,7 @@ class Location:
     def blue_hour(
         self,
         direction: SunDirection = SunDirection.RISING,
-        date: datetime.date = None,
+        date: Optional[datetime.date] = None,
         local: bool = True,
         observer_elevation: Elevation = 0.0,
     ) -> Tuple[datetime.datetime, datetime.datetime]:
@@ -727,7 +801,7 @@ class Location:
 
     def solar_azimuth(
         self,
-        dateandtime: datetime.datetime = None,
+        dateandtime: Optional[datetime.datetime] = None,
         observer_elevation: Elevation = 0.0,
     ) -> float:
         """Calculates the solar azimuth angle for a specific date/time.
@@ -739,16 +813,16 @@ class Location:
         if dateandtime is None:
             dateandtime = astral.sun.now(self.tzinfo)
         elif not dateandtime.tzinfo:
-            dateandtime = self.tzinfo.localize(dateandtime)
+            dateandtime = dateandtime.replace(tzinfo=self.tzinfo)
 
         observer = Observer(self.latitude, self.longitude, observer_elevation)
 
-        dateandtime = dateandtime.astimezone(pytz.utc)  # type: ignore
+        dateandtime = dateandtime.astimezone(datetime.timezone.utc)  # type: ignore
         return astral.sun.azimuth(observer, dateandtime)
 
     def solar_elevation(
         self,
-        dateandtime: datetime.datetime = None,
+        dateandtime: Optional[datetime.datetime] = None,
         observer_elevation: Elevation = 0.0,
     ) -> float:
         """Calculates the solar elevation angle for a specific time.
@@ -761,15 +835,17 @@ class Location:
         if dateandtime is None:
             dateandtime = astral.sun.now(self.tzinfo)
         elif not dateandtime.tzinfo:
-            dateandtime = self.tzinfo.localize(dateandtime)
+            dateandtime = dateandtime.replace(tzinfo=self.tzinfo)
 
         observer = Observer(self.latitude, self.longitude, observer_elevation)
 
-        dateandtime = dateandtime.astimezone(pytz.utc)  # type: ignore
+        dateandtime = dateandtime.astimezone(datetime.timezone.utc)  # type: ignore
         return astral.sun.elevation(observer, dateandtime)
 
     def solar_zenith(
-        self, dateandtime: datetime.datetime, observer_elevation: Elevation = 0.0,
+        self,
+        dateandtime: Optional[datetime.datetime] = None,
+        observer_elevation: Elevation = 0.0,
     ) -> float:
         """Calculates the solar zenith angle for a specific time.
 
@@ -779,12 +855,11 @@ class Location:
 
         return 90.0 - self.solar_elevation(dateandtime, observer_elevation)
 
-    def moon_phase(
-        self, date: datetime.date = None, local: bool = True
-    ):
+    def moon_phase(self, date: Optional[datetime.date] = None, local: bool = True):
         """Calculates the moon phase for a specific date.
 
-        :param date: The date to calculate the phase for. If ommitted the current date is used.
+        :param date:    The date to calculate the phase for. If ommitted the
+                        current date is used.
 
         :returns:
             A number designating the phase
